@@ -14,12 +14,13 @@ We provide examples to run the SLAM system in the [TUM dataset](http://vision.in
 git clone https://github.com/yxianzhe/DynaProp.git
 cd DynaProp
 ```
-- Install pycocotools:
+- Install pycocotools (make sure the python environment is python2):
 ```bash
 git clone https://github.com/waleedka/coco.git
 cd coco/PythonAPI
 make
 sudo make install
+cd ../..
 mv coco/PythonAPI/pycocotools src/python
 ```
 - Place the `mask_rcnn_coco.h5` model in the folder `DynaProp/src/python/`.

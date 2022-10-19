@@ -49,8 +49,11 @@ public:
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const cv::Mat &maskLeft, const cv::Mat &maskRight, const double &timestamp);
-    cv::Mat GrabImageRGBD(const cv::Mat &imRGB, const cv::Mat &imD, cv::Mat &mask, const double &timestamp, cv::Mat &imRGBOut, cv::Mat &imDOut, cv::Mat &maskOut);
-    cv::Mat GrabImageRGBD(const cv::Mat &imRGB, const cv::Mat &imD, cv::Mat &mask, const double &timestamp);
+    cv::Mat GrabImageRGBD(const cv::Mat &imRGB, const cv::Mat &imD, cv::Mat &mask, 
+                          const double &timestamp, cv::Mat &imRGBOut, cv::Mat &imDOut, cv::Mat &maskOut,
+                          const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation);
+    cv::Mat GrabImageRGBD(const cv::Mat &imRGB, const cv::Mat &imD, cv::Mat &mask, const double &timestamp,
+                          const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation);
     cv::Mat GrabImageMonocular(const cv::Mat &im, const cv::Mat &mask, const double &timestamp);
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
@@ -105,6 +108,9 @@ public:
     bool mbOnlyTracking;
 
     void Reset();
+
+    //DynaProp mask:
+    cv::Mat mMask;
 
 protected:
 

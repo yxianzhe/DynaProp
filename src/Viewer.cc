@@ -76,7 +76,7 @@ void Viewer::Run()
     pangolin::OpenGlMatrix Twc;
     Twc.SetIdentity();
 
-    cv::namedWindow("DynaSLAM: Current Frame");
+    cv::namedWindow("DynaProp: Current Frame");
 
     bool bFollow = true;
     bool bLocalizationMode = false;

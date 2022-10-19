@@ -122,6 +122,7 @@ int main(int argc, char **argv)
         // Segment out the images
         cv::Mat mask = cv::Mat::ones(480,640,CV_8U);
         cv::Mat imgwithmask = cv::Mat::zeros(480,640,imRGB.type());
+        bool bypropagation = false;
         if (argc == 6 || argc == 7)
         {
             cv::Mat maskfore;
@@ -134,6 +135,7 @@ int main(int argc, char **argv)
             else
             {
                 maskfore = MaskProp.GetMaskbyPropogation(imRGB,imD,string(argv[5]),vstrImageFilenamesRGB[ni].replace(0,4,""));
+                bypropagation = true;
             }
             // maskfore = MaskNet->GetSegmentation(imRGB,string(argv[5]),vstrImageFilenamesRGB[ni].replace(0,4,""));
 
@@ -152,8 +154,12 @@ int main(int argc, char **argv)
 
         // Pass the image to the SLAM system
         //std::chrono::steady_clock::time_point tSLAM1 = std::chrono::steady_clock::now();
-        if (argc == 7){SLAM.TrackRGBD(imRGB,imD,mask,tframe,imRGBOut,imDOut,maskOut);}//RGB原图，D原图，扣掉前景的mask，时间戳，输出RGB，输出D，输出mask（这个应该是结合了几何之后的结果）
-        else {SLAM.TrackRGBD(imRGB,imD,mask,tframe);}
+        if (argc == 7){
+            SLAM.TrackRGBD(imRGB,imD,mask,tframe,imRGBOut,imDOut,maskOut,MaskProp.GetNewImgKeyPoints(),MaskProp.GetNewImgDescriptors(),bypropagation);
+        }//RGB原图，D原图，扣掉前景的mask，时间戳，输出RGB，输出D，输出mask（这个应该是结合了几何之后的结果）
+        else {
+            SLAM.TrackRGBD(imRGB,imD,mask,tframe,MaskProp.GetNewImgKeyPoints(),MaskProp.GetNewImgDescriptors(),bypropagation);
+        }
         //std::chrono::steady_clock::time_point tSLAM2 = std::chrono::steady_clock::now();
         //double t_SLAM_total= std::chrono::duration_cast<std::chrono::duration<double> >(tSLAM2 - tSLAM1).count();
         //cout<<"SLAM for image "<<ni<<" takes "<<t_SLAM_total<<" seconds."<<endl;

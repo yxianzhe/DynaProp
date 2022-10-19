@@ -450,19 +450,23 @@ void MaskPropogation::ConvertDepth(cv::Mat &depthimg)
         mDepthMapFactor);   //缩放系数
 }
 
-void MaskPropogation::FindNewKeypoints(std::vector<cv::KeyPoint> &target_points, std::vector<cv::KeyPoint> &outside_points)
+void MaskPropogation::FindNewKeypoints()
 {
+    mtarget_points.clear();
+    moutside_points.clear();
     std::vector<cv::KeyPoint> keypoint_1, keypoint_2;
     cv::Mat descriptors_1, descriptors_2;
 
     // 仿函数，提取特征点和计算描述子
-    (*mextractor)(mlastimg,cv::Mat(),keypoint_1,descriptors_1);
+    keypoint_1 = mnewimg_keypoints;
+    descriptors_1 = mnewimg_descriptors;
     (*mextractor)(mnewimg,cv::Mat(),keypoint_2,descriptors_2);
 
     //把描述子转换为BoW形式
     DBoW2::BowVector BowVec1, BowVec2;
     DBoW2::FeatureVector FeatVec1, FeatVec2;
-    ComputeBoW(descriptors_1, mVocabulary, BowVec1, FeatVec1);
+    BowVec1 = mnewimg_BowVec;
+    FeatVec1 = mnewimg_FeatVec;
     ComputeBoW(descriptors_2, mVocabulary, BowVec2, FeatVec2);
 
     //进行特征点匹配
@@ -474,15 +478,18 @@ void MaskPropogation::FindNewKeypoints(std::vector<cv::KeyPoint> &target_points,
         int val = (int)mlastmask.at<uchar>(keypoint_1[matches[i].queryIdx].pt.y, keypoint_1[matches[i].queryIdx].pt.x);
         if(val==1)
         {
-            target_points.push_back(keypoint_2[matches[i].trainIdx]);
-            // target_descriptors.push_back(descriptors_2.row(matches[i].trainIdx));
+            mtarget_points.push_back(keypoint_2[matches[i].trainIdx]);
+            // mtarget_descriptors.push_back(descriptors_2.row(matches[i].trainIdx));
         }
         else
         {
-            outside_points.push_back(keypoint_2[matches[i].trainIdx]);
+            moutside_points.push_back(keypoint_2[matches[i].trainIdx]);
         }
     }
-
+    mnewimg_keypoints = keypoint_2;
+    mnewimg_descriptors = descriptors_2;
+    mnewimg_BowVec = BowVec2;
+    mnewimg_FeatVec = FeatVec2;
 }
 
 cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::Mat &newdepth, std::string dir, std::string name)
@@ -498,11 +505,12 @@ cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::M
     ConvertDepth(mnewdepth);
 
     cv::Mat maskthisframe = cv::imread(dir+"/"+name,CV_LOAD_IMAGE_UNCHANGED);
-    if(maskthisframe.empty())
+    // if(maskthisframe.empty())
+    if(1)
     {
         if(!mlastdepth.empty() && !mlastimg.empty() && !mlastmask.empty())
         {
-            FindNewKeypoints(mtarget_points, moutside_points);//找到一些新图像的特征点
+            FindNewKeypoints();//找到一些新图像的特征点
             
             cv::Mat outside_mask = cv::Mat::zeros(480,640,CV_8U);
             for (size_t i = 0; i < moutside_points.size(); i++)
@@ -545,8 +553,6 @@ cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::M
     UpdateImg(mnewimg);
     UpdateDepth(mnewdepth);
     UpdateMask(mnewmask);
-    mtarget_points.clear();
-    moutside_points.clear();
 
     return mlastmask;
 
@@ -564,10 +570,24 @@ void MaskPropogation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
         cv::cvtColor(mnewimg,mnewimg,CV_RGBA2GRAY);
 
     ConvertDepth(mnewdepth);
+    std::vector<cv::KeyPoint> keypoint_1;
+    cv::Mat descriptors_1;
+
+    // 仿函数，提取特征点和计算描述子
+    (*mextractor)(mnewimg,cv::Mat(),keypoint_1,descriptors_1);
+
+    //把描述子转换为BoW形式
+    DBoW2::BowVector BowVec1;
+    DBoW2::FeatureVector FeatVec1;
+    ComputeBoW(descriptors_1, mVocabulary, BowVec1, FeatVec1);
 
     UpdateImg(mnewimg);
     UpdateDepth(mnewdepth);
     UpdateMask(mnewmask);
+    mnewimg_keypoints = keypoint_1;
+    mnewimg_descriptors = descriptors_1;
+    mnewimg_BowVec = BowVec1;
+    mnewimg_FeatVec = FeatVec1;
 
 }
 
@@ -584,6 +604,16 @@ void MaskPropogation::UpdateDepth(const cv::Mat &depth)
 void MaskPropogation::UpdateMask(const cv::Mat &mask)
 {
     mlastmask = mask;
+}
+
+const std::vector<cv::KeyPoint>& MaskPropogation::GetNewImgKeyPoints() 
+{
+    return mnewimg_keypoints;
+}
+
+const cv::Mat& MaskPropogation::GetNewImgDescriptors()
+{
+    return mnewimg_descriptors;
 }
 
 }

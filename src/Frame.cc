@@ -155,7 +155,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const cv::Mat &maskL
 }
 
 Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMask, const double &timeStamp,  ORBextractor* extractor, ORBVocabulary* voc,
-             cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth)
+             cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
     :mImMask(imMask), mpORBvocabulary(voc), mpORBextractorLeft(extractor), mpORBextractorRight(static_cast<ORBextractor*>(NULL)), mImGray(imGray),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mIsKeyFrame(false), mImDepth(imDepth)
 {
@@ -172,8 +172,9 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
     // ORB extraction
-    ExtractORB(0,imGray);
-
+    // ExtractORB(0,imGray);    
+    mvKeys = bgd_points;
+    mDescriptors = bgd_descriptors;
     // Delete those ORB points that fall in Mask borders (Included by Berta)
     cv::Mat Mask_dil = imMask.clone();
     int dilation_size = 15;
@@ -241,7 +242,8 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
 // 相机外参K，畸变系数，基线*焦距，深度阈值
 Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMask, const cv::Mat &imRGB,
              const double &timeStamp,  ORBextractor* extractor, ORBVocabulary* voc,
-             cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth)
+             cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
+             const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
     :mImMask(imMask), mpORBvocabulary(voc), mpORBextractorLeft(extractor), mpORBextractorRight(static_cast<ORBextractor*>(NULL)), mImGray(imGray),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mIsKeyFrame(false), mImDepth(imDepth), mImRGB(imRGB)
 {
@@ -259,7 +261,9 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
 
     // ORB extraction
     // std::chrono::steady_clock::time_point tExtract1 = std::chrono::steady_clock::now();
-    ExtractORB(0,imGray);    
+    // ExtractORB(0,imGray);    
+    mvKeys = bgd_points;
+    mDescriptors = bgd_descriptors;
     // std::chrono::steady_clock::time_point tExtract2 = std::chrono::steady_clock::now();
     // double t_Extract_total= std::chrono::duration_cast<std::chrono::duration<double> >(tExtract2 - tExtract1).count();
     // cout<<"ExtractORB takes "<<t_Extract_total<<" seconds."<<endl;

@@ -152,7 +152,7 @@ void ImageGrabber::GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const senso
     else maskfore = mpMaskProp->GetMaskbyPropogation(imRGB,imgD,"no_save","no_file");
     mask = mask - maskfore;
 
-    mpSLAM->TrackRGBD(imRGB,imgD,mask,cv_ptrRGB->header.stamp.toSec());
+    mpSLAM->TrackRGBD(imRGB,imgD,mask,cv_ptrRGB->header.stamp.toSec(),mpMaskProp->GetNewImgKeyPoints(),mpMaskProp->GetNewImgDescriptors(),true);
 }
 
 

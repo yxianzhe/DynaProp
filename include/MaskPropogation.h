@@ -46,7 +46,7 @@ public:
 
     void ConvertDepth(cv::Mat &depthimg);
 
-    void FindNewKeypoints(std::vector<cv::KeyPoint> &target_points, std::vector<cv::KeyPoint> &outside_points);
+    void FindNewKeypoints();
 
     cv::Mat GetMaskbyPropogation(const cv::Mat &newimg, const cv::Mat &newdepth, std::string dir="no_save", std::string rgb_name="no_file"); 
 
@@ -57,6 +57,10 @@ public:
     void UpdateDepth(const cv::Mat &depth);
 
     void UpdateMask(const cv::Mat &mask);
+
+    const std::vector<cv::KeyPoint>& GetNewImgKeyPoints();
+
+    const cv::Mat& GetNewImgDescriptors();
 
 private:
 
@@ -73,6 +77,11 @@ private:
     cv::Mat mimgwithmask, mimgwithpoints;
 
     std::vector<cv::KeyPoint> mtarget_points, moutside_points;
+
+    std::vector<cv::KeyPoint> mnewimg_keypoints;
+    cv::Mat mnewimg_descriptors;
+    DBoW2::BowVector mnewimg_BowVec;
+    DBoW2::FeatureVector mnewimg_FeatVec;
     
     float mDepthMapFactor;
 };
