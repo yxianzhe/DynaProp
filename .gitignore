@@ -12,6 +12,7 @@ build/
 coco/
 lib/
 output/
+.vscode/
 src/python/MaskRCNN.pyc
 src/python/coco.pyc
 src/python/config.pyc
