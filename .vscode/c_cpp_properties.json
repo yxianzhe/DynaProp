@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "~/anaconda3/envs/dyna/include/python2.7",
+                "~/anaconda3/envs/dyna/lib/python2.7/site-packages/numpy/core/include/numpy",
+                "~/anaconda3/envs/dyna/lib/python2.7/site-packages",
+                "~/lib_sources/opencv-2.4.11/install/include",
+                "~/Documents/dynamic_robot/cv_bridge_ws/install/include",
+                "/opt/ros/noetic/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/local/bin/gcc",
+            "cStandard": "gnu11",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

@@ -128,7 +128,7 @@ src/Viewer.cc
 src/Conversion.cc
 src/MaskNet.cc
 src/Geometry.cc
-src/MaskPropogation.cc
+src/MaskPropagation.cc
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -149,5 +149,5 @@ add_executable(rgbd_tum
 Examples/RGB-D/rgbd_tum.cc)
 target_link_libraries(rgbd_tum ${PROJECT_NAME})
 
-
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 

@@ -6,7 +6,7 @@
 
 #include <sys/stat.h>
 #include <dirent.h>
-#include "MaskPropogation.h"
+#include "MaskPropagation.h"
 #include "ORBmatcher.h"
 #include "ORBVocabulary.h"
 #include "Converter.h"
@@ -14,7 +14,7 @@
 namespace DynaProp
 {
 
-MaskPropogation::MaskPropogation(const string &strVocFile, const string &strSettingsFile):mstrVocFile(strVocFile),mstrSettingsFile(strSettingsFile)
+MaskPropagation::MaskPropagation(const string &strVocFile, const string &strSettingsFile):mstrVocFile(strVocFile),mstrSettingsFile(strSettingsFile)
 {
     mVocabulary = new ORB_SLAM2::ORBVocabulary();
     bool bVocLoad = mVocabulary->loadFromTextFile(mstrVocFile);
@@ -24,7 +24,7 @@ MaskPropogation::MaskPropogation(const string &strVocFile, const string &strSett
         cerr << "Falied to open at: " << mstrVocFile << endl;
         exit(-1);
     }
-    cout << "Vocabulary loaded for MaskPropogation!" << endl << endl;
+    cout << "Vocabulary loaded for MaskPropagation!" << endl << endl;
 
     mextractor = new ORB_SLAM2::ORBextractor(1000, 1.2, 8, 20, 8);
 
@@ -40,9 +40,41 @@ MaskPropogation::MaskPropogation(const string &strVocFile, const string &strSett
     else
         mDepthMapFactor = 1.0f/DepthMapFactor;
 
+    float fx = fSettings["Camera.fx"];
+    float fy = fSettings["Camera.fy"];
+    float cx = fSettings["Camera.cx"];
+    float cy = fSettings["Camera.cy"];
+
+    //     |fx  0   cx|
+    // K = |0   fy  cy|
+    //     |0   0   1 |
+    //构造相机内参矩阵
+    cv::Mat K = cv::Mat::eye(3,3,CV_32F);
+    K.at<float>(0,0) = fx;
+    K.at<float>(1,1) = fy;
+    K.at<float>(0,2) = cx;
+    K.at<float>(1,2) = cy;
+    K.copyTo(mK);
+
+    // 图像矫正系数
+    // [k1 k2 p1 p2 k3]
+    cv::Mat DistCoef(4,1,CV_32F);
+    DistCoef.at<float>(0) = fSettings["Camera.k1"];
+    DistCoef.at<float>(1) = fSettings["Camera.k2"];
+    DistCoef.at<float>(2) = fSettings["Camera.p1"];
+    DistCoef.at<float>(3) = fSettings["Camera.p2"];
+    const float k3 = fSettings["Camera.k3"];
+    //有些相机的畸变系数中会没有k3项
+    if(k3!=0)
+    {
+        DistCoef.resize(5);
+        DistCoef.at<float>(4) = k3;
+    }
+    DistCoef.copyTo(mDistCoef);
+
 }
 
-cv::Mat MaskPropogation::DilaThisMask(const cv::Mat &mask, int dilation_size)
+cv::Mat MaskPropagation::DilaThisMask(const cv::Mat &mask, int dilation_size)
 {
     cv::Mat dilamask = mask.clone();
     cv::Mat kernel_dila = getStructuringElement(cv::MORPH_ELLIPSE,
@@ -52,7 +84,7 @@ cv::Mat MaskPropogation::DilaThisMask(const cv::Mat &mask, int dilation_size)
     return dilamask;
 }
 
-cv::Mat MaskPropogation::ErodeThisMask(const cv::Mat &mask, int erode_size)
+cv::Mat MaskPropagation::ErodeThisMask(const cv::Mat &mask, int erode_size)
 {
     cv::Mat erodemask = mask.clone();
     cv::Mat kernel_erode = getStructuringElement(cv::MORPH_ELLIPSE,
@@ -62,12 +94,11 @@ cv::Mat MaskPropogation::ErodeThisMask(const cv::Mat &mask, int erode_size)
     return erodemask;
 }
 
-cv::Mat MaskPropogation::RegionGrowing(const cv::Mat &im, int x, int y, float reg_maxdist, const cv::Mat &MaskLimit, const cv::Mat &outside_mask, const int &growing_size)
+cv::Mat MaskPropagation::RegionGrowing(const cv::Mat &im, int x, int y, float reg_maxdist, const cv::Mat &MaskLimit, const cv::Mat &outside_mask, const int &growing_size, float &reg_mean)
 {
     cv::Mat J = cv::Mat::zeros(im.size(),CV_32F);
     cv::Mat dilamask = DilaThisMask(MaskLimit);
 
-    float reg_mean = im.at<float>(y,x);
     int reg_size = 1;
 
     int _neg_free = 15000;
@@ -182,9 +213,10 @@ cv::Mat MaskPropogation::RegionGrowing(const cv::Mat &im, int x, int y, float re
     return(J);
 }
 
-cv::Mat MaskPropogation::DepthRegionGrowing(const std::vector<cv::KeyPoint> &vKeyPoints, const cv::Mat &outside_mask, const cv::Mat &imDepth, const cv::Mat &MaskLimit, const int &growing_size)
+cv::Mat MaskPropagation::DepthRegionGrowing(const std::vector<cv::KeyPoint> &vKeyPoints, const cv::Mat &outside_mask, const cv::Mat &imDepth, const cv::Mat &MaskLimit, const int &growing_size)
 {
     cv::Mat maskG = cv::Mat::zeros(480,640,CV_32F);
+    regions.clear();
 
     if (!vKeyPoints.empty())
     {
@@ -196,13 +228,15 @@ cv::Mat MaskPropogation::DepthRegionGrowing(const std::vector<cv::KeyPoint> &vKe
             int ySeed = vKeyPoints[i].pt.y;
             const float d = imDepth.at<float>(ySeed,xSeed);
             // Mat dilamask = DilaThisMask(MaskLimit);
-            int limit = (int)MaskLimit.at<uchar>(ySeed,xSeed);
-            bool bound = (xSeed>=growing_size/2 && xSeed<640-growing_size/2 && ySeed>=growing_size/2 && ySeed<480-growing_size/2);
+            int limit = (int)MaskLimit.at<uchar>(ySeed,xSeed); //开始生长的点条件苛刻一点，一定在上一帧中这个像素的点也是在mask内，从而确保开始生长点不在mask边缘
+            bool bound = (xSeed>=growing_size/2 && xSeed<640-growing_size/2 && ySeed>=growing_size/2 && ySeed<480-growing_size/2); //没有越界
             if (maskG.at<float>(ySeed,xSeed)!=1. && d > 0 && limit==1 && bound)
             {
-                cv::Mat J = RegionGrowing(imDepth,xSeed,ySeed,mSegThreshold,MaskLimit,outside_mask,growing_size);//取中心点进行区域生长，阈值是2.0，生成mask
+                float reg_mean = imDepth.at<float>(ySeed,xSeed);
+                cv::Mat J = RegionGrowing(imDepth,xSeed,ySeed,mSegThreshold,MaskLimit,outside_mask,growing_size,reg_mean);//取中心点进行区域生长，阈值是2.0，生成mask，前景1
                 // maskG = maskG | J;
                 cv::bitwise_or(maskG,J,maskG);
+                regions.emplace_back(make_pair(vKeyPoints[i], reg_mean));
             }
         }
 
@@ -230,7 +264,7 @@ cv::Mat MaskPropogation::DepthRegionGrowing(const std::vector<cv::KeyPoint> &vKe
     return _maskG;
 }
 
-void MaskPropogation::ComputeBoW(cv::Mat &Descriptors, ORB_SLAM2::ORBVocabulary* Vocabulary, DBoW2::BowVector &BowVec, DBoW2::FeatureVector &FeatVec)
+void MaskPropagation::ComputeBoW(cv::Mat &Descriptors, ORB_SLAM2::ORBVocabulary* Vocabulary, DBoW2::BowVector &BowVec, DBoW2::FeatureVector &FeatVec)
 {
     // 判断是否以前已经计算过了，计算过了就跳过
     if(BowVec.empty())
@@ -245,7 +279,7 @@ void MaskPropogation::ComputeBoW(cv::Mat &Descriptors, ORB_SLAM2::ORBVocabulary*
     }
 }
 
-void MaskPropogation::ComputeThreeMaxima(std::vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3)
+void MaskPropagation::ComputeThreeMaxima(std::vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3)
 {
     int max1=0;
     int max2=0;
@@ -289,7 +323,7 @@ void MaskPropogation::ComputeThreeMaxima(std::vector<int>* histo, const int L, i
     }
 }
 
-int MaskPropogation::SearchByBoW(const DBoW2::FeatureVector &vFeatVec1, const DBoW2::FeatureVector &vFeatVec2, 
+int MaskPropagation::SearchByBoW(const DBoW2::FeatureVector &vFeatVec1, const DBoW2::FeatureVector &vFeatVec2, 
         const std::vector<cv::KeyPoint> &vKeyPoint1, const std::vector<cv::KeyPoint> &vKeyPoint2,
         const cv::Mat Descriptors1, const cv::Mat Descriptors2, 
         std::vector<cv::DMatch> &matches, bool mbCheckOrientation, float mfNNratio)
@@ -441,7 +475,7 @@ int MaskPropogation::SearchByBoW(const DBoW2::FeatureVector &vFeatVec1, const DB
     return nmatches;
 }
 
-void MaskPropogation::ConvertDepth(cv::Mat &depthimg)
+void MaskPropagation::ConvertDepth(cv::Mat &depthimg)
 {
     if((fabs(mDepthMapFactor-1.0f)>1e-5) || depthimg.type()!=CV_32F)
     depthimg.convertTo(  //将图像转换成为另外一种数据类型,具有可选的数据大小缩放系数
@@ -450,17 +484,84 @@ void MaskPropogation::ConvertDepth(cv::Mat &depthimg)
         mDepthMapFactor);   //缩放系数
 }
 
-void MaskPropogation::FindNewKeypoints()
+void MaskPropagation::UndistortKeyPoints()
+{
+    // Step 1 如果第一个畸变参数为0，不需要矫正。第一个畸变参数k1是最重要的，一般不为0，为0的话，说明畸变参数都是0
+	//变量mDistCoef中存储了opencv指定格式的去畸变参数，格式为：(k1,k2,p1,p2,k3)
+    if(mDistCoef.at<float>(0)==0.0)
+    {
+        mnewun_keypoints=mnewimg_keypoints;
+        return;
+    }
+
+    int N = mnewimg_keypoints.size();
+    // Step 2 如果畸变参数不为0，用OpenCV函数进行畸变矫正
+    // Fill matrix with points
+    // N为提取的特征点数量，为满足OpenCV函数输入要求，将N个特征点保存在N*2的矩阵中
+    cv::Mat mat(N,2,CV_32F);
+	//遍历每个特征点，并将它们的坐标保存到矩阵中
+    for(int i=0; i<N; i++)
+    {
+		//然后将这个特征点的横纵坐标分别保存
+        mat.at<float>(i,0)=mnewimg_keypoints[i].pt.x;
+        mat.at<float>(i,1)=mnewimg_keypoints[i].pt.y;
+    }
+
+    // Undistort points
+    // 函数reshape(int cn,int rows=0) 其中cn为更改后的通道数，rows=0表示这个行将保持原来的参数不变
+    //为了能够直接调用opencv的函数来去畸变，需要先将矩阵调整为2通道（对应坐标x,y） 
+    mat=mat.reshape(2);
+    cv::undistortPoints(	
+		mat,				//输入的特征点坐标
+		mat,				//输出的校正后的特征点坐标覆盖原矩阵
+		mK,					//相机的内参数矩阵
+		mDistCoef,			//相机畸变参数矩阵
+		cv::Mat(),			//一个空矩阵，对应为函数原型中的R
+		mK); 				//新内参数矩阵，对应为函数原型中的P
+	
+	//调整回只有一个通道，回归我们正常的处理方式
+    mat=mat.reshape(1);
+
+    // Fill undistorted keypoint vector
+    // Step 存储校正后的特征点
+    mnewun_keypoints.resize(N);
+	//遍历每一个特征点
+    for(int i=0; i<N; i++)
+    {
+		//根据索引获取这个特征点
+		//注意之所以这样做而不是直接重新声明一个特征点对象的目的是，能够得到源特征点对象的其他属性
+        cv::KeyPoint kp = mnewimg_keypoints[i];
+		//读取校正后的坐标并覆盖老坐标
+        kp.pt.x=mat.at<float>(i,0);
+        kp.pt.y=mat.at<float>(i,1);
+        mnewun_keypoints[i]=kp;
+    }
+}
+
+void MaskPropagation::FindNewKeypoints()
 {
     mtarget_points.clear();
     moutside_points.clear();
-    std::vector<cv::KeyPoint> keypoint_1, keypoint_2;
+    std::vector<cv::KeyPoint> keypoint_1, keypoint_2, undistored_1, undistored_2;
     cv::Mat descriptors_1, descriptors_2;
 
     // 仿函数，提取特征点和计算描述子
     keypoint_1 = mnewimg_keypoints;
+    undistored_1 = mnewun_keypoints;
     descriptors_1 = mnewimg_descriptors;
     (*mextractor)(mnewimg,cv::Mat(),keypoint_2,descriptors_2);
+
+    mnewimg_keypoints = keypoint_2;
+    mnewimg_descriptors = descriptors_2;
+    
+    // 去畸变，得到去畸变后的像素坐标
+    UndistortKeyPoints();
+    undistored_2 = mnewun_keypoints;
+    // for(size_t i(0); i<keypoint_2.size(); ++i)
+    // {
+    //     cout << "keypoint_2[" << i << "]: " << keypoint_2[i].pt.x << "," << keypoint_2[i].pt.y << "   "
+    //          << "undistored_2[" << i << "]: " << undistored_2[i].pt.x << "," << undistored_2[i].pt.y << endl;
+    // }
 
     //把描述子转换为BoW形式
     DBoW2::BowVector BowVec1, BowVec2;
@@ -473,26 +574,58 @@ void MaskPropogation::FindNewKeypoints()
     std::vector<cv::DMatch> matches;
     int num_matches = SearchByBoW(FeatVec1,FeatVec2,keypoint_1,keypoint_2,descriptors_1,descriptors_2,matches,true,0.6);
 
+    std::vector<cv::Point2f> un_match_1, un_match_2; // 所有匹配上的去畸变点，用来计算点到极线的距离
+    std::vector<cv::Point2f> un_static_1, un_static_2; // 用来计算F矩阵的点
     for( size_t i(0); i<matches.size(); ++i)
     {
-        int val = (int)mlastmask.at<uchar>(keypoint_1[matches[i].queryIdx].pt.y, keypoint_1[matches[i].queryIdx].pt.x);
+        int val = (int)mlastmask.at<uchar>(keypoint_1[matches[i].queryIdx].pt.y, keypoint_1[matches[i].queryIdx].pt.x); // at行列的索引
         if(val==1)
         {
-            mtarget_points.push_back(keypoint_2[matches[i].trainIdx]);
+            mtarget_points.emplace_back(keypoint_2[matches[i].trainIdx]);
             // mtarget_descriptors.push_back(descriptors_2.row(matches[i].trainIdx));
         }
         else
         {
-            moutside_points.push_back(keypoint_2[matches[i].trainIdx]);
+            moutside_points.emplace_back(keypoint_2[matches[i].trainIdx]);
+            un_static_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
+            un_static_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
         }
+        un_match_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
+        un_match_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
     }
-    mnewimg_keypoints = keypoint_2;
-    mnewimg_descriptors = descriptors_2;
+
+    //计算Fundamental Matrix
+    F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
+    cout << "Fundamental Matrix is: " << F << endl;
+    
+    boost::math::normal_distribution<> norm(0,1);
+    double PI = acos(-1);
+
+    for( size_t i(0); i<8; ++i)
+    {
+        // float X = F.at<float>(0,0) * un_match_1[i].x + F.at<float>(0,1) * un_match_1[i].y + F.at<float>(0,2);
+        // float Y = F.at<float>(1,0) * un_match_1[i].x + F.at<float>(1,1) * un_match_1[i].y + F.at<float>(1,2);
+        // float Z = F.at<float>(2,0) * un_match_1[i].x + F.at<float>(2,1) * un_match_1[i].y + F.at<float>(2,2);
+        // float d = fabs(un_match_2[i].x * X + un_match_2[i].y * Y + Z) / sqrt(X * X + Y * Y);
+        // cout << "X,Y,Z,d for match " << i << " = " << X << "," << Y << "," << Z << "," << d << endl;
+        cout<< "Check F for match " << i << ":" <<endl;
+        cv::Mat y1 = ( cv::Mat_<double> (3,1) << un_match_1[i].x, un_match_1[i].y, 1 );
+        cv::Mat y2 = ( cv::Mat_<double> (3,1) << un_match_2[i].x, un_match_2[i].y, 1 );
+        // cout<<"y1, y2 = "<< y1 << "," << y2 <<endl;
+        cv::Mat l = F * y1;
+        cv::Mat d = y2.t() * l; //对极约束表达式，应该等于0
+        double dist = fabs(d.at<double>(0,0)) / sqrt(l.at<double>(0,0) * l.at<double>(0,0) + l.at<double>(1,0) * l.at<double>(1,0));
+        double pgd = 2 * boost::math::cdf(norm,dist) - 1;
+        cout<< " epipolar constraint = " << d <<endl;
+        cout<< " dist = " << dist <<endl;
+        cout<< " probability of geometry dynamic: " << pgd << endl;
+    }
+
     mnewimg_BowVec = BowVec2;
     mnewimg_FeatVec = FeatVec2;
 }
 
-cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::Mat &newdepth, std::string dir, std::string name)
+cv::Mat MaskPropagation::GetMaskbyPropagation(const cv::Mat &newimg, const cv::Mat &newdepth, std::string dir, std::string name)
 {
     mnewimg = newimg;
     mnewdepth = newdepth;
@@ -512,7 +645,7 @@ cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::M
         {
             FindNewKeypoints();//找到一些新图像的特征点
             
-            cv::Mat outside_mask = cv::Mat::zeros(480,640,CV_8U);
+            cv::Mat outside_mask = cv::Mat::zeros(480,640,CV_8U); //区域生长需要停止的地方
             for (size_t i = 0; i < moutside_points.size(); i++)
             {
                 int tempy = moutside_points[i].pt.y;
@@ -531,6 +664,42 @@ cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::M
             }
 
             maskthisframe = DepthRegionGrowing(mtarget_points, outside_mask, mnewdepth, mlastmask, GROW_SIZE);
+
+            P_s_d.clear();
+            P_s_d.resize(mnewimg_keypoints.size()); 
+            cv::Mat imgp = mnewimg;
+            for (size_t i(0); i < mnewimg_keypoints.size(); i++)
+            {
+                float min_dist = 640000;
+                float min_ddepth = 10.0;
+                if(mnewdepth.at<float>(mnewimg_keypoints[i].pt.y, mnewimg_keypoints[i].pt.x) < 0.01) {
+                    P_s_d[i] = 0.5;
+                } else {
+                    for(auto &reg:regions)
+                    {
+                        float dist = (reg.first.pt.y - mnewimg_keypoints[i].pt.y) * (reg.first.pt.y - mnewimg_keypoints[i].pt.y)
+                                    +(reg.first.pt.x - mnewimg_keypoints[i].pt.x) * (reg.first.pt.x - mnewimg_keypoints[i].pt.x);
+                        if(dist < min_dist) {
+                            min_dist = dist;
+                            min_ddepth = fabs(mnewdepth.at<float>(mnewimg_keypoints[i].pt.y, mnewimg_keypoints[i].pt.x) - mnewdepth.at<float>(reg.second));
+                        }
+                    }
+                    if(min_ddepth < 2.5) {
+                        P_s_d[i] = 1.0;
+                    }else {
+                        P_s_d[i] = 1.0 / (exp(-0.5 / min_ddepth) + 1);
+                    }
+                }
+                // if(P_s_d[i] > 0.75) {
+                //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 0, -1);
+                // }
+                // else {
+                //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 255, -1);
+                // }
+                // std::cout << "keypoint " << i << " minddepth: " << min_ddepth << std::endl;
+                // std::cout << "keypoint " << i << " (" << mnewimg_keypoints[i].pt.y << "," << mnewimg_keypoints[i].pt.x << ") " << "P_s_d is: " << P_s_d.back() << std::endl;
+            }
+            // cv::imshow("imgp:" , imgp);
             if(dir.compare("no_save")!=0)
             {
                 DIR* _dir = opendir(dir.c_str());
@@ -558,7 +727,7 @@ cv::Mat MaskPropogation::GetMaskbyPropogation(const cv::Mat &newimg, const cv::M
 
 }
 
-void MaskPropogation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat &newdepth, const cv::Mat &newmask)
+void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat &newdepth, const cv::Mat &newmask)
 {
     mnewimg = newimg;
     mnewdepth = newdepth;
@@ -570,48 +739,125 @@ void MaskPropogation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
         cv::cvtColor(mnewimg,mnewimg,CV_RGBA2GRAY);
 
     ConvertDepth(mnewdepth);
-    std::vector<cv::KeyPoint> keypoint_1;
-    cv::Mat descriptors_1;
+    std::vector<cv::KeyPoint> keypoint_1, undistored_1, keypoint_2, undistored_2;
+    cv::Mat descriptors_1, descriptors_2;
+    DBoW2::BowVector BowVec1, BowVec2;
+    DBoW2::FeatureVector FeatVec1, FeatVec2;
 
+    if(!mnewimg_keypoints.empty()) {
+        keypoint_1 = mnewimg_keypoints;
+        undistored_1 = mnewun_keypoints;
+        descriptors_1 = mnewimg_descriptors;
+        BowVec1 = mnewimg_BowVec;
+        FeatVec1 = mnewimg_FeatVec;
+    }
+    
     // 仿函数，提取特征点和计算描述子
-    (*mextractor)(mnewimg,cv::Mat(),keypoint_1,descriptors_1);
+    (*mextractor)(mnewimg,cv::Mat(),keypoint_2,descriptors_2);
 
     //把描述子转换为BoW形式
-    DBoW2::BowVector BowVec1;
-    DBoW2::FeatureVector FeatVec1;
-    ComputeBoW(descriptors_1, mVocabulary, BowVec1, FeatVec1);
+    ComputeBoW(descriptors_2, mVocabulary, BowVec2, FeatVec2);
+
+    mnewimg_keypoints = keypoint_2;
+    mnewimg_descriptors = descriptors_2;
+
+    UndistortKeyPoints();
+    undistored_2 = mnewun_keypoints;
+    mnewimg_BowVec = BowVec2;
+    mnewimg_FeatVec = FeatVec2;
+
+    if(!keypoint_1.empty()) {
+        //进行特征点匹配
+        std::vector<cv::DMatch> matches;
+        int num_matches = SearchByBoW(FeatVec1,FeatVec2,keypoint_1,keypoint_2,descriptors_1,descriptors_2,matches,true,0.6);
+
+        std::vector<cv::Point2f> un_match_1, un_match_2; // 所有匹配上的去畸变点，用来计算点到极线的距离
+        std::vector<cv::Point2f> un_static_1, un_static_2; // 用来计算F矩阵的点
+        for( size_t i(0); i<matches.size(); ++i)
+        {
+            int val = (int)mlastmask.at<uchar>(keypoint_1[matches[i].queryIdx].pt.y, keypoint_1[matches[i].queryIdx].pt.x);
+            if(val==0)
+            {
+                un_static_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
+                un_static_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
+            }
+            un_match_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
+            un_match_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
+        }
+
+        //计算Fundamental Matrix
+        F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
+        cout << "Fundamental Matrix is: " << F << endl;
+
+        boost::math::normal_distribution<> norm(0,1);
+        double PI = acos(-1);
+
+        for( size_t i(0); i<8; ++i)
+        {
+            // float X = F.at<float>(0,0) * un_match_1[i].x + F.at<float>(0,1) * un_match_1[i].y + F.at<float>(0,2);
+            // float Y = F.at<float>(1,0) * un_match_1[i].x + F.at<float>(1,1) * un_match_1[i].y + F.at<float>(1,2);
+            // float Z = F.at<float>(2,0) * un_match_1[i].x + F.at<float>(2,1) * un_match_1[i].y + F.at<float>(2,2);
+            // float d = fabs(un_match_2[i].x * X + un_match_2[i].y * Y + Z) / sqrt(X * X + Y * Y);
+            // cout << "X,Y,Z,d for match " << i << " = " << X << "," << Y << "," << Z << "," << d << endl;
+            cout<< "Check F for match " << i << ":" <<endl;
+            cv::Mat y1 = ( cv::Mat_<double> (3,1) << un_match_1[i].x, un_match_1[i].y, 1 );
+            cv::Mat y2 = ( cv::Mat_<double> (3,1) << un_match_2[i].x, un_match_2[i].y, 1 );
+            // cout<<"y1, y2 = "<< y1 << "," << y2 <<endl;
+            cv::Mat l = F * y1;
+            cv::Mat d = y2.t() * l; //对极约束表达式，应该等于0
+            double dist = fabs(d.at<double>(0,0)) / sqrt(l.at<double>(0,0) * l.at<double>(0,0) + l.at<double>(1,0) * l.at<double>(1,0));
+            double pgd = 2 * boost::math::cdf(norm,0) - 1;
+            cout<< " epipolar constraint = " << d <<endl;
+            cout<< " dist = " << dist <<endl;
+            cout<< " probability of geometry dynamic: " << pgd << endl;
+        }
+    }
 
     UpdateImg(mnewimg);
     UpdateDepth(mnewdepth);
     UpdateMask(mnewmask);
-    mnewimg_keypoints = keypoint_1;
-    mnewimg_descriptors = descriptors_1;
-    mnewimg_BowVec = BowVec1;
-    mnewimg_FeatVec = FeatVec1;
 
+    P_s_d.clear();
+    P_s_d.resize(mnewimg_keypoints.size());
+    cv::Mat imgp = mnewimg;
+    for (size_t i(0); i < mnewimg_keypoints.size(); i++) 
+    {
+        if(mnewmask.at<uchar>(mnewimg_keypoints[i].pt.y, mnewimg_keypoints[i].pt.x)==1) {
+            P_s_d[i] = 1.0;
+        } else {
+            P_s_d[i] = 0.5;
+        }
+        // if(P_s_d[i] > 0.75) {
+        //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 0, -1);
+        // }
+        // else {
+        //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 255, -1);
+        // }
+    }
+    // cv::imshow("imgp:" , imgp);
 }
 
-void MaskPropogation::UpdateImg(const cv::Mat &img)
+void MaskPropagation::UpdateImg(const cv::Mat &img)
 {
     mlastimg = img;
 }
 
-void MaskPropogation::UpdateDepth(const cv::Mat &depth)
+void MaskPropagation::UpdateDepth(const cv::Mat &depth)
 {
     mlastdepth = depth;
 }
 
-void MaskPropogation::UpdateMask(const cv::Mat &mask)
+void MaskPropagation::UpdateMask(const cv::Mat &mask)
 {
     mlastmask = mask;
 }
 
-const std::vector<cv::KeyPoint>& MaskPropogation::GetNewImgKeyPoints() 
+const std::vector<cv::KeyPoint>& MaskPropagation::GetNewImgKeyPoints() 
 {
     return mnewimg_keypoints;
 }
 
-const cv::Mat& MaskPropogation::GetNewImgDescriptors()
+const cv::Mat& MaskPropagation::GetNewImgDescriptors()
 {
     return mnewimg_descriptors;
 }

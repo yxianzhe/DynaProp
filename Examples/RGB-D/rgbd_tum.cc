@@ -20,7 +20,7 @@
 
 #include "Geometry.h"
 #include "MaskNet.h"
-#include "MaskPropogation.h"
+#include "MaskPropagation.h"
 #include "System.h"
 
 using namespace std;
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
         cout << "Mask R-CNN loaded!" << endl;
     }
 
-    DynaProp::MaskPropogation MaskProp(argv[1],argv[2]);
+    DynaProp::MaskPropagation MaskProp(argv[1],argv[2]);
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true); // true
@@ -105,6 +105,7 @@ int main(int argc, char **argv)
     for(int ni=0; ni<nImages; ni++)
     {
         // Read image and depthmap from file
+        std::cout << std::endl << "image " << ni << std::endl;
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],CV_LOAD_IMAGE_UNCHANGED);//原图RGB
         imD = cv::imread(string(argv[3])+"/"+vstrImageFilenamesD[ni],CV_LOAD_IMAGE_UNCHANGED);//原图D
 
@@ -134,7 +135,7 @@ int main(int argc, char **argv)
             }
             else
             {
-                maskfore = MaskProp.GetMaskbyPropogation(imRGB,imD,string(argv[5]),vstrImageFilenamesRGB[ni].replace(0,4,""));
+                maskfore = MaskProp.GetMaskbyPropagation(imRGB,imD,string(argv[5]),vstrImageFilenamesRGB[ni].replace(0,4,""));
                 bypropagation = true;
             }
             // maskfore = MaskNet->GetSegmentation(imRGB,string(argv[5]),vstrImageFilenamesRGB[ni].replace(0,4,""));

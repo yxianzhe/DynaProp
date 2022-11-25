@@ -372,7 +372,7 @@ class PyramidROIAlign(KE.Layer):
             # Keep track of which box is mapped to which level
             box_to_level.append(ix)
 
-            # Stop gradient propogation to ROI proposals
+            # Stop gradient Propagation to ROI proposals
             level_boxes = tf.stop_gradient(level_boxes)
             box_indices = tf.stop_gradient(box_indices)
 

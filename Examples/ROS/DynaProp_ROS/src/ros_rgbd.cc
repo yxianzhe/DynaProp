@@ -22,14 +22,14 @@
 
 #include "../../../include/System.h"
 #include "../../../include/MaskNet.h"
-#include "../../../include/MaskPropogation.h"
+#include "../../../include/MaskPropagation.h"
 
 using namespace std;
 
 class ImageGrabber
 {
 public:
-    ImageGrabber(ORB_SLAM2::System* pSLAM, DynaSLAM::SegmentDynObject* pMaskNet, DynaProp::MaskPropogation* pMaskProp):mpSLAM(pSLAM),mpMaskNet(pMaskNet),mpMaskProp(pMaskProp){}
+    ImageGrabber(ORB_SLAM2::System* pSLAM, DynaSLAM::SegmentDynObject* pMaskNet, DynaProp::MaskPropagation* pMaskProp):mpSLAM(pSLAM),mpMaskNet(pMaskNet),mpMaskProp(pMaskProp){}
 
     void GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const sensor_msgs::ImageConstPtr& msgD);
 
@@ -37,7 +37,7 @@ public:
 public:
     ORB_SLAM2::System* mpSLAM;
     DynaSLAM::SegmentDynObject *mpMaskNet;
-    DynaProp::MaskPropogation *mpMaskProp;
+    DynaProp::MaskPropagation *mpMaskProp;
     vector<pair<int,pair<cv::Mat,cv::Mat>>> imgVec;
     vector<pair<int,cv::Mat>> maskVec;
     vector<pair<int,cv::Mat>> segVec;
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
     MaskNet = new DynaSLAM::SegmentDynObject();
     cout << "Mask R-CNN loaded!" << endl;
 
-    DynaProp::MaskPropogation MaskProp(argv[1],argv[2]);
+    DynaProp::MaskPropagation MaskProp(argv[1],argv[2]);
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true);
@@ -149,7 +149,7 @@ void ImageGrabber::GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const senso
         mpMaskProp->GetMaskbySegmentation(latest_RGB,latest_D,latest_mask);//用新分割的mask更新参考帧
     }
     if(ni==1) maskfore = latest_mask;
-    else maskfore = mpMaskProp->GetMaskbyPropogation(imRGB,imgD,"no_save","no_file");
+    else maskfore = mpMaskProp->GetMaskbyPropagation(imRGB,imgD,"no_save","no_file");
     mask = mask - maskfore;
 
     mpSLAM->TrackRGBD(imRGB,imgD,mask,cv_ptrRGB->header.stamp.toSec(),mpMaskProp->GetNewImgKeyPoints(),mpMaskProp->GetNewImgDescriptors(),true);

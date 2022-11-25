@@ -8,6 +8,7 @@
 #define MASKPROP_H
 
 #include <iostream>
+#include <boost/math/distributions.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -22,16 +23,16 @@ namespace DynaProp
 {
 #define GROW_SIZE 3
 
-class MaskPropogation
+class MaskPropagation
 {
 public:
-    MaskPropogation(const string &strVocFile, const string &strSettingsFile);
+    MaskPropagation(const string &strVocFile, const string &strSettingsFile);
 
     cv::Mat DilaThisMask(const cv::Mat &mask, int dilation_size = 15);
 
     cv::Mat ErodeThisMask(const cv::Mat &mask, int erode_size = 15);
 
-    cv::Mat RegionGrowing(const cv::Mat &im, int x, int y, float reg_maxdist, const cv::Mat &MaskLimit, const cv::Mat &outside_mask, const int &growing_size);
+    cv::Mat RegionGrowing(const cv::Mat &im, int x, int y, float reg_maxdist, const cv::Mat &MaskLimit, const cv::Mat &outside_mask, const int &growing_size, float &reg_mean);
 
     cv::Mat DepthRegionGrowing(const std::vector<cv::KeyPoint> &vKeyPoints, const cv::Mat &outside_mask, const cv::Mat &imDepth, const cv::Mat &MaskLimit, const int &growing_size);
 
@@ -46,9 +47,11 @@ public:
 
     void ConvertDepth(cv::Mat &depthimg);
 
+    void UndistortKeyPoints();
+
     void FindNewKeypoints();
 
-    cv::Mat GetMaskbyPropogation(const cv::Mat &newimg, const cv::Mat &newdepth, std::string dir="no_save", std::string rgb_name="no_file"); 
+    cv::Mat GetMaskbyPropagation(const cv::Mat &newimg, const cv::Mat &newdepth, std::string dir="no_save", std::string rgb_name="no_file"); 
 
     void GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat &newdepth, const cv::Mat &newmask);
 
@@ -68,6 +71,8 @@ private:
 
     ORB_SLAM2::ORBVocabulary* mVocabulary;
 
+    cv::Mat mK, mDistCoef;
+
     string mstrVocFile, mstrSettingsFile;
 
     cv::Mat mmask_origin;
@@ -78,7 +83,12 @@ private:
 
     std::vector<cv::KeyPoint> mtarget_points, moutside_points;
 
-    std::vector<cv::KeyPoint> mnewimg_keypoints;
+    std::vector<std::pair<cv::KeyPoint, float>> regions; 
+
+    std::vector<cv::KeyPoint> mnewimg_keypoints, mnewun_keypoints;
+    cv::Mat F;
+    std::vector<float> P_s_d;
+    std::vector<float> P_g_d;
     cv::Mat mnewimg_descriptors;
     DBoW2::BowVector mnewimg_BowVec;
     DBoW2::FeatureVector mnewimg_FeatVec;

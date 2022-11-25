@@ -19,3 +19,4 @@ src/python/mask_rcnn_coco.h5
 src/python/model.pyc
 src/python/pycocotools/
 src/python/utils.pyc
+src/kmeans.cc
