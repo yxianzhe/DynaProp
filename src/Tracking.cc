@@ -209,7 +209,7 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
 cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, cv::Mat &mask,
                                 const double &timestamp, cv::Mat &imRGBOut,
                                 cv::Mat &imDOut, cv::Mat &maskOut,
-                                const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
+                                const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const std::vector<float> &dp, const bool bypropagation)
 {
     mImGray = imRGB;
     cv::Mat imDepth = imD;
@@ -257,7 +257,7 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, cv::Mat
     //     cout<<"Geometry takes "<<t_geo_total<<" seconds."<<endl;
     // }
     // std::chrono::steady_clock::time_point tTrack1 = std::chrono::steady_clock::now();
-    mCurrentFrame = Frame(mImGray,imDepth,imMask,imRGBOut,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,bgd_points,bgd_descriptors,bypropagation);
+    mCurrentFrame = Frame(mImGray,imDepth,imMask,imRGBOut,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,bgd_points,bgd_descriptors,dp,bypropagation);
     mMask = mask;
     // std::chrono::steady_clock::time_point tTrack2 = std::chrono::steady_clock::now();
     // double t_Track_total= std::chrono::duration_cast<std::chrono::duration<double> >(tTrack2 - tTrack1).count();
@@ -290,7 +290,7 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, cv::Mat
 }
 
 cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, cv::Mat &mask,
-                                const double &timestamp, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
+                                const double &timestamp, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const std::vector<float> &dp, const bool bypropagation)
 {
     mImGray = imRGB;
     cv::Mat imDepth = imD;
@@ -324,7 +324,7 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, cv::Mat
 
     // mGeometry.GeometricModelCorrection(mCurrentFrame,mImGray,imMask);
 
-    mCurrentFrame = Frame(mImGray,imDepth,imMask,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,bgd_points,bgd_descriptors,bypropagation);
+    mCurrentFrame = Frame(mImGray,imDepth,imMask,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,bgd_points,bgd_descriptors,dp,bypropagation);
     mMask = mask;
 
     Track();

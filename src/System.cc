@@ -157,7 +157,7 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
 cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, cv::Mat &mask,
                           const double &timestamp, cv::Mat &imRGBOut,
                           cv::Mat &imDOut, cv::Mat &maskOut,
-                          const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
+                          const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const std::vector<float> &dp, const bool bypropagation)
 {
     if(mSensor!=RGBD)
     {
@@ -200,7 +200,7 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, cv::Mat &m
     }
 
     // std::chrono::steady_clock::time_point tGrab1 = std::chrono::steady_clock::now();
-    cv::Mat Tcw = mpTracker->GrabImageRGBD(im,depthmap,mask,timestamp,imRGBOut,imDOut,maskOut,bgd_points,bgd_descriptors,bypropagation);
+    cv::Mat Tcw = mpTracker->GrabImageRGBD(im,depthmap,mask,timestamp,imRGBOut,imDOut,maskOut,bgd_points,bgd_descriptors,dp,bypropagation);
     // std::chrono::steady_clock::time_point tGrab2 = std::chrono::steady_clock::now();
     // double t_Grab_total= std::chrono::duration_cast<std::chrono::duration<double> >(tGrab2 - tGrab1).count();
     // cout<<"GrabImageRGBD takes "<<t_Grab_total<<" seconds."<<endl;
@@ -213,7 +213,7 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, cv::Mat &m
 }
 
 cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, cv::Mat &mask,
-                          const double &timestamp, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
+                          const double &timestamp, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const std::vector<float> &dp, const bool bypropagation)
 {
     if(mSensor!=RGBD)
     {
@@ -255,7 +255,7 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, cv::Mat &m
     }
     }
 
-    cv::Mat Tcw = mpTracker->GrabImageRGBD(im,depthmap,mask,timestamp,bgd_points,bgd_descriptors,bypropagation);
+    cv::Mat Tcw = mpTracker->GrabImageRGBD(im,depthmap,mask,timestamp,bgd_points,bgd_descriptors,dp,bypropagation);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;

@@ -576,6 +576,9 @@ void MaskPropagation::FindNewKeypoints()
 
     std::vector<cv::Point2f> un_match_1, un_match_2; // 所有匹配上的去畸变点，用来计算点到极线的距离
     std::vector<cv::Point2f> un_static_1, un_static_2; // 用来计算F矩阵的点
+    std::vector<float> P_old_d = P_d;
+    P_d.clear();
+    P_d.resize(mnewimg_keypoints.size(), 0.5);
     for( size_t i(0); i<matches.size(); ++i)
     {
         int val = (int)mlastmask.at<uchar>(keypoint_1[matches[i].queryIdx].pt.y, keypoint_1[matches[i].queryIdx].pt.x); // at行列的索引
@@ -590,35 +593,34 @@ void MaskPropagation::FindNewKeypoints()
             un_static_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
             un_static_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
         }
+        P_d[matches[i].trainIdx] = P_old_d[matches[i].queryIdx];
         un_match_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
         un_match_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
     }
 
     //计算Fundamental Matrix
     F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
-    cout << "Fundamental Matrix is: " << F << endl;
+    // cout << "Fundamental Matrix is: " << F << endl;
+    P_g_d.clear();
+    P_g_d.resize(mnewimg_keypoints.size(), -1);
     
     boost::math::normal_distribution<> norm(0,1);
-    double PI = acos(-1);
 
-    for( size_t i(0); i<8; ++i)
+    for( size_t i(0); i<matches.size(); ++i)
     {
-        // float X = F.at<float>(0,0) * un_match_1[i].x + F.at<float>(0,1) * un_match_1[i].y + F.at<float>(0,2);
-        // float Y = F.at<float>(1,0) * un_match_1[i].x + F.at<float>(1,1) * un_match_1[i].y + F.at<float>(1,2);
-        // float Z = F.at<float>(2,0) * un_match_1[i].x + F.at<float>(2,1) * un_match_1[i].y + F.at<float>(2,2);
-        // float d = fabs(un_match_2[i].x * X + un_match_2[i].y * Y + Z) / sqrt(X * X + Y * Y);
-        // cout << "X,Y,Z,d for match " << i << " = " << X << "," << Y << "," << Z << "," << d << endl;
-        cout<< "Check F for match " << i << ":" <<endl;
+        // cout<< "Check F for match " << i << ":" <<endl;
         cv::Mat y1 = ( cv::Mat_<double> (3,1) << un_match_1[i].x, un_match_1[i].y, 1 );
         cv::Mat y2 = ( cv::Mat_<double> (3,1) << un_match_2[i].x, un_match_2[i].y, 1 );
         // cout<<"y1, y2 = "<< y1 << "," << y2 <<endl;
         cv::Mat l = F * y1;
         cv::Mat d = y2.t() * l; //对极约束表达式，应该等于0
         double dist = fabs(d.at<double>(0,0)) / sqrt(l.at<double>(0,0) * l.at<double>(0,0) + l.at<double>(1,0) * l.at<double>(1,0));
+        dist = dist<2? dist:2;
         double pgd = 2 * boost::math::cdf(norm,dist) - 1;
-        cout<< " epipolar constraint = " << d <<endl;
-        cout<< " dist = " << dist <<endl;
-        cout<< " probability of geometry dynamic: " << pgd << endl;
+        // cout<< " epipolar constraint = " << d <<endl;
+        // cout<< " dist = " << dist <<endl;
+        // cout<< " probability of geometry dynamic: " << pgd << endl;
+        P_g_d[matches[i].trainIdx] = pgd;
     }
 
     mnewimg_BowVec = BowVec2;
@@ -644,7 +646,7 @@ cv::Mat MaskPropagation::GetMaskbyPropagation(const cv::Mat &newimg, const cv::M
         if(!mlastdepth.empty() && !mlastimg.empty() && !mlastmask.empty())
         {
             FindNewKeypoints();//找到一些新图像的特征点
-            
+
             cv::Mat outside_mask = cv::Mat::zeros(480,640,CV_8U); //区域生长需要停止的地方
             for (size_t i = 0; i < moutside_points.size(); i++)
             {
@@ -668,6 +670,8 @@ cv::Mat MaskPropagation::GetMaskbyPropagation(const cv::Mat &newimg, const cv::M
             P_s_d.clear();
             P_s_d.resize(mnewimg_keypoints.size()); 
             cv::Mat imgp = mnewimg;
+            int Ns = 0;
+            int Ng = 0;
             for (size_t i(0); i < mnewimg_keypoints.size(); i++)
             {
                 float min_dist = 640000;
@@ -690,8 +694,19 @@ cv::Mat MaskPropagation::GetMaskbyPropagation(const cv::Mat &newimg, const cv::M
                         P_s_d[i] = 1.0 / (exp(-0.5 / min_ddepth) + 1);
                     }
                 }
-                // if(P_s_d[i] > 0.75) {
+                if(P_g_d[i] !=-1) {
+                    if(P_g_d[i] > 0.75) {
+                        Ng++;
+                    }
+                    if(P_s_d[i] > 0.75) {
+                        Ns++;
+                    }
+                }
+                // if(P_g_d[i] > 0.75) {
                 //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 0, -1);
+                // }
+                // else if (P_g_d[i] == -1) {
+                //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 125, -1);
                 // }
                 // else {
                 //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 255, -1);
@@ -699,7 +714,27 @@ cv::Mat MaskPropagation::GetMaskbyPropagation(const cv::Mat &newimg, const cv::M
                 // std::cout << "keypoint " << i << " minddepth: " << min_ddepth << std::endl;
                 // std::cout << "keypoint " << i << " (" << mnewimg_keypoints[i].pt.y << "," << mnewimg_keypoints[i].pt.x << ") " << "P_s_d is: " << P_s_d.back() << std::endl;
             }
+            float w = (Ng+Ns==0)? 0 : Ng / (Ng+Ns);
+            P_o_d.clear();
+            P_o_d.resize(mnewimg_keypoints.size());
+            for (size_t i(0); i < mnewimg_keypoints.size(); i++) {
+                if(P_g_d[i] !=-1){
+                    P_o_d[i] = w * P_g_d[i] + (1-w) * P_s_d[i];
+                }else {
+                    P_o_d[i] = P_s_d[i];
+                }
+                float pd = P_o_d[i] * P_d[i];
+                float ps = (1 - P_o_d[i]) * (1 - P_d[i]);
+                P_d[i] = pd / (pd + ps);
+                // if(P_d[i] > 0.75) {
+                //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 0, -1);
+                // }
+                // else {
+                //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 255, -1);
+                // }
+            }
             // cv::imshow("imgp:" , imgp);
+            // cv::waitKey(0);
             if(dir.compare("no_save")!=0)
             {
                 DIR* _dir = opendir(dir.c_str());
@@ -766,6 +801,8 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
     mnewimg_BowVec = BowVec2;
     mnewimg_FeatVec = FeatVec2;
 
+    P_g_d.clear();
+    P_g_d.resize(mnewimg_keypoints.size(), -1);
     if(!keypoint_1.empty()) {
         //进行特征点匹配
         std::vector<cv::DMatch> matches;
@@ -773,6 +810,9 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
 
         std::vector<cv::Point2f> un_match_1, un_match_2; // 所有匹配上的去畸变点，用来计算点到极线的距离
         std::vector<cv::Point2f> un_static_1, un_static_2; // 用来计算F矩阵的点
+        std::vector<float> P_old_d = P_d;
+        P_d.clear();
+        P_d.resize(mnewimg_keypoints.size(), 0.5);
         for( size_t i(0); i<matches.size(); ++i)
         {
             int val = (int)mlastmask.at<uchar>(keypoint_1[matches[i].queryIdx].pt.y, keypoint_1[matches[i].queryIdx].pt.x);
@@ -781,36 +821,35 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
                 un_static_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
                 un_static_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
             }
+            P_d[matches[i].trainIdx] = P_old_d[matches[i].queryIdx];
             un_match_1.emplace_back(undistored_1[matches[i].queryIdx].pt);
             un_match_2.emplace_back(undistored_2[matches[i].trainIdx].pt);
         }
 
         //计算Fundamental Matrix
         F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
-        cout << "Fundamental Matrix is: " << F << endl;
+        // cout << "Fundamental Matrix is: " << F << endl;
 
         boost::math::normal_distribution<> norm(0,1);
-        double PI = acos(-1);
 
-        for( size_t i(0); i<8; ++i)
+        for( size_t i(0); i<matches.size(); ++i)
         {
-            // float X = F.at<float>(0,0) * un_match_1[i].x + F.at<float>(0,1) * un_match_1[i].y + F.at<float>(0,2);
-            // float Y = F.at<float>(1,0) * un_match_1[i].x + F.at<float>(1,1) * un_match_1[i].y + F.at<float>(1,2);
-            // float Z = F.at<float>(2,0) * un_match_1[i].x + F.at<float>(2,1) * un_match_1[i].y + F.at<float>(2,2);
-            // float d = fabs(un_match_2[i].x * X + un_match_2[i].y * Y + Z) / sqrt(X * X + Y * Y);
-            // cout << "X,Y,Z,d for match " << i << " = " << X << "," << Y << "," << Z << "," << d << endl;
-            cout<< "Check F for match " << i << ":" <<endl;
+            // cout<< "Check F for match " << i << ":" <<endl;
             cv::Mat y1 = ( cv::Mat_<double> (3,1) << un_match_1[i].x, un_match_1[i].y, 1 );
             cv::Mat y2 = ( cv::Mat_<double> (3,1) << un_match_2[i].x, un_match_2[i].y, 1 );
             // cout<<"y1, y2 = "<< y1 << "," << y2 <<endl;
             cv::Mat l = F * y1;
             cv::Mat d = y2.t() * l; //对极约束表达式，应该等于0
             double dist = fabs(d.at<double>(0,0)) / sqrt(l.at<double>(0,0) * l.at<double>(0,0) + l.at<double>(1,0) * l.at<double>(1,0));
-            double pgd = 2 * boost::math::cdf(norm,0) - 1;
-            cout<< " epipolar constraint = " << d <<endl;
-            cout<< " dist = " << dist <<endl;
-            cout<< " probability of geometry dynamic: " << pgd << endl;
+            dist = dist<2? dist:2;
+            double pgd = 2 * boost::math::cdf(norm,dist) - 1;
+            // cout<< " epipolar constraint = " << d <<endl;
+            // cout<< " dist = " << dist <<endl;
+            // cout<< " probability of geometry dynamic: " << pgd << endl;
+            P_g_d[matches[i].trainIdx] = pgd;
         }
+    } else {
+        P_d.resize(mnewimg_keypoints.size(), 0.5);
     }
 
     UpdateImg(mnewimg);
@@ -820,6 +859,8 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
     P_s_d.clear();
     P_s_d.resize(mnewimg_keypoints.size());
     cv::Mat imgp = mnewimg;
+    int Ns = 0;
+    int Ng = 0;
     for (size_t i(0); i < mnewimg_keypoints.size(); i++) 
     {
         if(mnewmask.at<uchar>(mnewimg_keypoints[i].pt.y, mnewimg_keypoints[i].pt.x)==1) {
@@ -827,7 +868,37 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
         } else {
             P_s_d[i] = 0.5;
         }
-        // if(P_s_d[i] > 0.75) {
+        if(P_g_d[i] !=-1) {
+            if(P_g_d[i] > 0.75) {
+                Ng++;
+            }
+            if(P_s_d[i] > 0.75) {
+                Ns++;
+            }
+        }
+        // if(P_g_d[i] > 0.75) {
+        //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 0, -1);
+        // }
+        // else if(P_g_d[i] == -1) {
+        //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 125, -1);
+        // }
+        // else {
+        //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 255, -1);
+        // }
+    }
+    float w = (Ng+Ns==0)? 0 : Ng / (Ng+Ns);
+    P_o_d.clear();
+    P_o_d.resize(mnewimg_keypoints.size());
+    for (size_t i(0); i < mnewimg_keypoints.size(); i++) {
+        if(P_g_d[i] !=-1){
+            P_o_d[i] = w * P_g_d[i] + (1-w) * P_s_d[i];
+        }else {
+            P_o_d[i] = P_s_d[i];
+        }
+        float pd = P_o_d[i] * P_d[i];
+        float ps = (1 - P_o_d[i]) * (1 - P_d[i]);
+        P_d[i] = pd / (pd + ps);
+        // if(P_d[i] > 0.75) {
         //     cv::circle(imgp, mnewimg_keypoints[i].pt, 3, 0, -1);
         // }
         // else {
@@ -835,6 +906,7 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
         // }
     }
     // cv::imshow("imgp:" , imgp);
+    // cv::waitKey(0);
 }
 
 void MaskPropagation::UpdateImg(const cv::Mat &img)
@@ -860,6 +932,11 @@ const std::vector<cv::KeyPoint>& MaskPropagation::GetNewImgKeyPoints()
 const cv::Mat& MaskPropagation::GetNewImgDescriptors()
 {
     return mnewimg_descriptors;
+}
+
+const std::vector<float>& MaskPropagation::GetNewImgDynamicProbablity()
+{
+    return P_d;
 }
 
 }

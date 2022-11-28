@@ -117,6 +117,16 @@ cv::Mat FrameDrawer::DrawFrame()
                 }
             }
         }
+        // for(int i=0;i<mvCurrentDynas.size();i++)
+        // {
+        //     cv::Point2f pt1,pt2;
+        //     pt1.x=mvCurrentDynas[i].pt.x-r;
+        //     pt1.y=mvCurrentDynas[i].pt.y-r;
+        //     pt2.x=mvCurrentDynas[i].pt.x+r;
+        //     pt2.y=mvCurrentDynas[i].pt.y+r;
+        //     cv::rectangle(im,pt1,pt2,cv::Scalar(0,0,255));
+        //     cv::circle(im,mvCurrentDynas[i].pt,2,cv::Scalar(0,0,255),-1);
+        // }
     }
 
     cv::Mat imWithInfo;
@@ -167,12 +177,14 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 void FrameDrawer::Update(Tracking *pTracker)
 {
     unique_lock<mutex> lock(mMutex);
-    cv::Mat imgwithmask = cv::Mat::zeros(480,640,pTracker->mImGray.type());
-    cv::Mat mask = cv::Mat::zeros(480,640,pTracker->mMask.type());
-    mask = pTracker->mMask;
-    pTracker->mImGray.copyTo(imgwithmask,mask);
-    mIm = imgwithmask;
+    // cv::Mat imgwithmask = cv::Mat::zeros(480,640,pTracker->mImGray.type());
+    // cv::Mat mask = cv::Mat::zeros(480,640,pTracker->mMask.type());
+    // mask = pTracker->mMask;
+    // pTracker->mImGray.copyTo(imgwithmask,mask);
+    // mIm = imgwithmask;
+    pTracker->mImGray.copyTo(mIm);
     mvCurrentKeys=pTracker->mCurrentFrame.mvKeys;
+    mvCurrentDynas = pTracker->mCurrentFrame.mvKeysDyna;
     N = mvCurrentKeys.size();
     mvbVO = vector<bool>(N,false);
     mvbMap = vector<bool>(N,false);

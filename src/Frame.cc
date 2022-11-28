@@ -155,7 +155,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const cv::Mat &maskL
 }
 
 Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMask, const double &timeStamp,  ORBextractor* extractor, ORBVocabulary* voc,
-             cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
+             cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const std::vector<float> &dp, const bool bypropagation)
     :mImMask(imMask), mpORBvocabulary(voc), mpORBextractorLeft(extractor), mpORBextractorRight(static_cast<ORBextractor*>(NULL)), mImGray(imGray),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mIsKeyFrame(false), mImDepth(imDepth)
 {
@@ -176,31 +176,34 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
     mvKeys = bgd_points;
     mDescriptors = bgd_descriptors;
     // Delete those ORB points that fall in Mask borders (Included by Berta)
-    cv::Mat Mask_dil = imMask.clone();
-    int dilation_size = 15;
-    cv::Mat kernel = getStructuringElement(cv::MORPH_ELLIPSE,
-                                        cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
-                                        cv::Point( dilation_size, dilation_size ) );
-    cv::erode(imMask, Mask_dil, kernel);
+    // cv::Mat Mask_dil = imMask.clone();
+    // int dilation_size = 15;
+    // cv::Mat kernel = getStructuringElement(cv::MORPH_ELLIPSE,
+    //                                     cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+    //                                     cv::Point( dilation_size, dilation_size ) );
+    // cv::erode(imMask, Mask_dil, kernel);
 
     if(mvKeys.empty())
         return;
 
-    std::vector<cv::KeyPoint> _mvKeys;
+    std::vector<cv::KeyPoint> _mvKeys, _mvKeysDyna;
     cv::Mat _mDescriptors;
 
     for (size_t i(0); i < mvKeys.size(); ++i)
     {
-        int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
-        if (val == 1)
+        // int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
+        if (dp[i] < 0.75)
         {
             _mvKeys.push_back(mvKeys[i]);
             _mDescriptors.push_back(mDescriptors.row(i));
+        }else {
+            _mvKeysDyna.push_back(mvKeys[i]);
         }
     }
 
     mvKeys = _mvKeys;
     mDescriptors = _mDescriptors;
+    mvKeysDyna = _mvKeysDyna;
 
     N = mvKeys.size();
 
@@ -243,7 +246,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
 Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMask, const cv::Mat &imRGB,
              const double &timeStamp,  ORBextractor* extractor, ORBVocabulary* voc,
              cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
-             const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const bool bypropagation)
+             const std::vector<cv::KeyPoint> &bgd_points, const cv::Mat &bgd_descriptors, const std::vector<float> &dp, const bool bypropagation)
     :mImMask(imMask), mpORBvocabulary(voc), mpORBextractorLeft(extractor), mpORBextractorRight(static_cast<ORBextractor*>(NULL)), mImGray(imGray),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mIsKeyFrame(false), mImDepth(imDepth), mImRGB(imRGB)
 {
@@ -269,31 +272,34 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
     // cout<<"ExtractORB takes "<<t_Extract_total<<" seconds."<<endl;
 
     // Delete those ORB points that fall in Mask borders (Included by Berta) 删去在Mask边边上的特征点
-    cv::Mat Mask_dil = imMask.clone();
-    int dilation_size = 15;
-    cv::Mat kernel = getStructuringElement(cv::MORPH_ELLIPSE,
-                                        cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
-                                        cv::Point( dilation_size, dilation_size ) );
-    cv::erode(imMask, Mask_dil, kernel);//腐蚀，出参：Mask_dil，即腐蚀后的结果
+    // cv::Mat Mask_dil = imMask.clone();
+    // int dilation_size = 15;
+    // cv::Mat kernel = getStructuringElement(cv::MORPH_ELLIPSE,
+    //                                     cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+    //                                     cv::Point( dilation_size, dilation_size ) );
+    // cv::erode(imMask, Mask_dil, kernel);//腐蚀，出参：Mask_dil，即腐蚀后的结果
 
     if(mvKeys.empty())
         return;
 
-    std::vector<cv::KeyPoint> _mvKeys;//存放的是删去mask边上之后剩下的特征点
+    std::vector<cv::KeyPoint> _mvKeys, _mvKeysDyna;//存放的是删去mask边上之后剩下的特征点
     cv::Mat _mDescriptors;
 
     for (size_t i(0); i < mvKeys.size(); ++i)
     {
-        int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
-        if (val == 1)
+        // int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
+        if (dp[i] < 0.75)
         {
             _mvKeys.push_back(mvKeys[i]);//只有在腐蚀后的mask里面的特征点才被包含进来
             _mDescriptors.push_back(mDescriptors.row(i));
+        }else {
+            _mvKeysDyna.push_back(mvKeys[i]);
         }
     }
 
     mvKeys = _mvKeys;
     mDescriptors = _mDescriptors;
+    mvKeysDyna = _mvKeysDyna;
 
     N = mvKeys.size();
 

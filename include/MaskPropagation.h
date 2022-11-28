@@ -65,6 +65,8 @@ public:
 
     const cv::Mat& GetNewImgDescriptors();
 
+    const std::vector<float>& GetNewImgDynamicProbablity();
+
 private:
 
     ORB_SLAM2::ORBextractor* mextractor;
@@ -87,11 +89,13 @@ private:
 
     std::vector<cv::KeyPoint> mnewimg_keypoints, mnewun_keypoints;
     cv::Mat F;
-    std::vector<float> P_s_d;
-    std::vector<float> P_g_d;
+    std::vector<float> P_s_d; //segmentation dynamic
+    std::vector<float> P_g_d; //geometry dynamic
+    std::vector<float> P_o_d; //observation dynamic
+    std::vector<float> P_d;
     cv::Mat mnewimg_descriptors;
     DBoW2::BowVector mnewimg_BowVec;
-    DBoW2::FeatureVector mnewimg_FeatVec;
+    DBoW2::FeatureVector mnewimg_FeatVec; 
     
     float mDepthMapFactor;
 };

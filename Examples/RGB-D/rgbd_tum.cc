@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     for(int ni=0; ni<nImages; ni++)
     {
         // Read image and depthmap from file
-        std::cout << std::endl << "image " << ni << std::endl;
+        // std::cout << std::endl << "image " << ni << std::endl;
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],CV_LOAD_IMAGE_UNCHANGED);//原图RGB
         imD = cv::imread(string(argv[3])+"/"+vstrImageFilenamesD[ni],CV_LOAD_IMAGE_UNCHANGED);//原图D
 
@@ -156,10 +156,10 @@ int main(int argc, char **argv)
         // Pass the image to the SLAM system
         //std::chrono::steady_clock::time_point tSLAM1 = std::chrono::steady_clock::now();
         if (argc == 7){
-            SLAM.TrackRGBD(imRGB,imD,mask,tframe,imRGBOut,imDOut,maskOut,MaskProp.GetNewImgKeyPoints(),MaskProp.GetNewImgDescriptors(),bypropagation);
+            SLAM.TrackRGBD(imRGB,imD,mask,tframe,imRGBOut,imDOut,maskOut,MaskProp.GetNewImgKeyPoints(),MaskProp.GetNewImgDescriptors(),MaskProp.GetNewImgDynamicProbablity(),bypropagation);
         }//RGB原图，D原图，扣掉前景的mask，时间戳，输出RGB，输出D，输出mask（这个应该是结合了几何之后的结果）
         else {
-            SLAM.TrackRGBD(imRGB,imD,mask,tframe,MaskProp.GetNewImgKeyPoints(),MaskProp.GetNewImgDescriptors(),bypropagation);
+            SLAM.TrackRGBD(imRGB,imD,mask,tframe,MaskProp.GetNewImgKeyPoints(),MaskProp.GetNewImgDescriptors(),MaskProp.GetNewImgDynamicProbablity(),bypropagation);
         }
         //std::chrono::steady_clock::time_point tSLAM2 = std::chrono::steady_clock::now();
         //double t_SLAM_total= std::chrono::duration_cast<std::chrono::duration<double> >(tSLAM2 - tSLAM1).count();
