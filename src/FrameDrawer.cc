@@ -117,16 +117,16 @@ cv::Mat FrameDrawer::DrawFrame()
                 }
             }
         }
-        // for(int i=0;i<mvCurrentDynas.size();i++)
-        // {
-        //     cv::Point2f pt1,pt2;
-        //     pt1.x=mvCurrentDynas[i].pt.x-r;
-        //     pt1.y=mvCurrentDynas[i].pt.y-r;
-        //     pt2.x=mvCurrentDynas[i].pt.x+r;
-        //     pt2.y=mvCurrentDynas[i].pt.y+r;
-        //     cv::rectangle(im,pt1,pt2,cv::Scalar(0,0,255));
-        //     cv::circle(im,mvCurrentDynas[i].pt,2,cv::Scalar(0,0,255),-1);
-        // }
+        for(int i=0;i<mvCurrentDynas.size();i++)
+        {
+            cv::Point2f pt1,pt2;
+            pt1.x=mvCurrentDynas[i].pt.x-r;
+            pt1.y=mvCurrentDynas[i].pt.y-r;
+            pt2.x=mvCurrentDynas[i].pt.x+r;
+            pt2.y=mvCurrentDynas[i].pt.y+r;
+            cv::rectangle(im,pt1,pt2,cv::Scalar(0,0,255));
+            cv::circle(im,mvCurrentDynas[i].pt,2,cv::Scalar(0,0,255),-1);
+        }
     }
 
     cv::Mat imWithInfo;

@@ -192,7 +192,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
     for (size_t i(0); i < mvKeys.size(); ++i)
     {
         // int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
-        if (dp[i] < 0.75)
+        if (dp[i] < 0.8)
         {
             _mvKeys.push_back(mvKeys[i]);
             _mDescriptors.push_back(mDescriptors.row(i));
@@ -288,9 +288,9 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imMas
     for (size_t i(0); i < mvKeys.size(); ++i)
     {
         // int val = (int)Mask_dil.at<uchar>(mvKeys[i].pt.y,mvKeys[i].pt.x);
-        if (dp[i] < 0.75)
+        if (dp[i] < 0.8)
         {
-            _mvKeys.push_back(mvKeys[i]);//只有在腐蚀后的mask里面的特征点才被包含进来
+            _mvKeys.push_back(mvKeys[i]);
             _mDescriptors.push_back(mDescriptors.row(i));
         }else {
             _mvKeysDyna.push_back(mvKeys[i]);

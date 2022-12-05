@@ -599,7 +599,10 @@ void MaskPropagation::FindNewKeypoints()
     }
 
     //计算Fundamental Matrix
-    F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
+    // cout<< "size of matches: "<<undistored_1.size()<<","<<undistored_2.size()<<","<<un_static_1.size()<<","<<un_static_2.size()<<endl;
+    if(matches.size()>8){
+        F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
+    }
     // cout << "Fundamental Matrix is: " << F << endl;
     P_g_d.clear();
     P_g_d.resize(mnewimg_keypoints.size(), -1);
@@ -691,14 +694,15 @@ cv::Mat MaskPropagation::GetMaskbyPropagation(const cv::Mat &newimg, const cv::M
                     if(min_ddepth < 2.5) {
                         P_s_d[i] = 1.0;
                     }else {
-                        P_s_d[i] = 1.0 / (exp(-0.5 / min_ddepth) + 1);
+                        // P_s_d[i] = 1.0 / (exp(-0.5 / min_ddepth) + 1);
+                        P_s_d[i] = 2 * (1.0 / (exp(-0.5 / min_ddepth) + 1) - 0.5);
                     }
                 }
                 if(P_g_d[i] !=-1) {
-                    if(P_g_d[i] > 0.75) {
+                    if(P_g_d[i] > 0.8) {
                         Ng++;
                     }
-                    if(P_s_d[i] > 0.75) {
+                    if(P_s_d[i] > 0.8) {
                         Ns++;
                     }
                 }
@@ -827,7 +831,9 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
         }
 
         //计算Fundamental Matrix
-        F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
+        if(matches.size()>8){
+            F = cv::findFundamentalMat(un_static_1,un_static_2,cv::FM_RANSAC,3,0.99);
+        }
         // cout << "Fundamental Matrix is: " << F << endl;
 
         boost::math::normal_distribution<> norm(0,1);
@@ -866,13 +872,13 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
         if(mnewmask.at<uchar>(mnewimg_keypoints[i].pt.y, mnewimg_keypoints[i].pt.x)==1) {
             P_s_d[i] = 1.0;
         } else {
-            P_s_d[i] = 0.5;
+            P_s_d[i] = 0.0;
         }
         if(P_g_d[i] !=-1) {
-            if(P_g_d[i] > 0.75) {
+            if(P_g_d[i] > 0.8) {
                 Ng++;
             }
-            if(P_s_d[i] > 0.75) {
+            if(P_s_d[i] > 0.8) {
                 Ns++;
             }
         }
@@ -907,6 +913,57 @@ void MaskPropagation::GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat
     }
     // cv::imshow("imgp:" , imgp);
     // cv::waitKey(0);
+}
+
+void MaskPropagation::SetRefMask(const cv::Mat &newimg, const cv::Mat &newdepth, const cv::Mat &newmask)
+{
+    mnewimg = newimg;
+    mnewdepth = newdepth;
+    mnewmask = newmask;
+
+    if(mnewimg.channels()==3)
+        cv::cvtColor(mnewimg,mnewimg,CV_RGB2GRAY);
+    else if(mnewimg.channels()==4)
+        cv::cvtColor(mnewimg,mnewimg,CV_RGBA2GRAY);
+
+    ConvertDepth(mnewdepth);
+    std::vector<cv::KeyPoint> keypoint_2;
+    cv::Mat descriptors_2;
+    DBoW2::BowVector BowVec2;
+    DBoW2::FeatureVector FeatVec2;
+    
+    // 仿函数，提取特征点和计算描述子
+    (*mextractor)(mnewimg,cv::Mat(),keypoint_2,descriptors_2);
+
+    //把描述子转换为BoW形式
+    ComputeBoW(descriptors_2, mVocabulary, BowVec2, FeatVec2);
+
+    mnewimg_keypoints = keypoint_2;
+    mnewimg_descriptors = descriptors_2;
+
+    UndistortKeyPoints();
+    mnewimg_BowVec = BowVec2;
+    mnewimg_FeatVec = FeatVec2;
+
+    UpdateImg(mnewimg);
+    UpdateDepth(mnewdepth);
+    UpdateMask(mnewmask);
+
+    P_d.clear();
+    P_d.resize(mnewimg_keypoints.size(), 0.5);
+    P_o_d.clear();
+    P_o_d.resize(mnewimg_keypoints.size());
+    for (size_t i(0); i < mnewimg_keypoints.size(); i++) 
+    {
+        if(mnewmask.at<uchar>(mnewimg_keypoints[i].pt.y, mnewimg_keypoints[i].pt.x)==1){
+            P_o_d[i] = 1.0;
+        }else{
+            P_o_d[i] = 0.0;
+        }
+        float pd = P_o_d[i] * P_d[i];
+        float ps = (1 - P_o_d[i]) * (1 - P_d[i]);
+        P_d[i] = pd / (pd + ps);
+    }
 }
 
 void MaskPropagation::UpdateImg(const cv::Mat &img)

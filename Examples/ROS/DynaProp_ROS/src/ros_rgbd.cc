@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 
     if(argc != 3)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 RGBD path_to_vocabulary path_to_settings" << endl;        
+        cerr << endl << "Usage: rosrun DynaProp_ROS RGBD path_to_vocabulary path_to_settings" << endl;        
         ros::shutdown();
         return 1;
     }    
@@ -146,13 +146,14 @@ void ImageGrabber::GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const senso
         seg_mtx.lock();
         segVec.clear();
         seg_mtx.unlock();
-        mpMaskProp->GetMaskbySegmentation(latest_RGB,latest_D,latest_mask);//用新分割的mask更新参考帧
+        mpMaskProp->SetRefMask(latest_RGB,latest_D,latest_mask);//用新分割的mask更新参考帧
+        // cout<<"mask updated!"<<endl;
     }
     if(ni==1) maskfore = latest_mask;
     else maskfore = mpMaskProp->GetMaskbyPropagation(imRGB,imgD,"no_save","no_file");
     mask = mask - maskfore;
 
-    mpSLAM->TrackRGBD(imRGB,imgD,mask,cv_ptrRGB->header.stamp.toSec(),mpMaskProp->GetNewImgKeyPoints(),mpMaskProp->GetNewImgDescriptors(),true);
+    mpSLAM->TrackRGBD(imRGB,imgD,mask,cv_ptrRGB->header.stamp.toSec(),mpMaskProp->GetNewImgKeyPoints(),mpMaskProp->GetNewImgDescriptors(),mpMaskProp->GetNewImgDynamicProbablity(),true);
 }
 
 

@@ -55,6 +55,8 @@ public:
 
     void GetMaskbySegmentation(const cv::Mat &newimg, const cv::Mat &newdepth, const cv::Mat &newmask);
 
+    void SetRefMask(const cv::Mat &newimg, const cv::Mat &newdepth, const cv::Mat &newmask);
+
     void UpdateImg(const cv::Mat &img);
 
     void UpdateDepth(const cv::Mat &depth);
